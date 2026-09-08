@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Route types first: tsc needs what `next typegen` writes.
+      - run: npm run typecheck
+
+      - run: npm run lint
+
+      - run: npm test
+
+      - run: npx playwright install --with-deps chromium
+
+      # The backend-free suite. The full multi-phone round in tests/e2e/room.spec.ts
+      # needs a throwaway Supabase project and runs when E2E_SUPABASE is set.
+      - run: npx playwright test tests/e2e/smoke.spec.ts
+
+  # The migrations get their own job against a real Postgres. Unit tests cannot
+  # see PL/pgSQL name shadowing, a missing grant, or a policy that does not do
+  # what its name says — and all three fail only in production.
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: bash scripts/db-test.sh

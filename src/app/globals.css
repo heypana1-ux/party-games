@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+/*
+  Design tokens.
+
+  The app is dark-only on purpose. It is used in bars and living rooms at night,
+  usually one-handed, often by someone who has had a drink — so the palette is
+  built for a dim room and high contrast, not for a light/dark switch nobody
+  will touch mid-game.
+
+  Two accents carry the single most important distinction in the UI: gold is the
+  host, violet is you. A player never sees a gold control they cannot press.
+*/
+
+@theme {
+  --color-bg: #0a090c;
+  --color-surface: #15131a;
+  --color-surface-2: #1e1b25;
+  --color-surface-3: #2a2632;
+  --color-border: #332e3d;
+  --color-border-strong: #453e52;
+
+  --color-ink: #f5f2f7;
+  --color-ink-muted: #a69eb0;
+  --color-ink-faint: #6e6678;
+
+  /* Host. Everything only the host can do is gold, and nothing else is. */
+  --color-gold: #e7b65c;
+  --color-gold-soft: #2a2113;
+  --color-gold-ink: #1a1206;
+
+  /* The player's own actions. */
+  --color-accent: #9b7bf7;
+  --color-accent-soft: #211a38;
+  --color-accent-ink: #0e0a18;
+
+  --color-good: #46c48a;
+  --color-warn: #e5a13a;
+  --color-danger: #f05a6b;
+  --color-danger-soft: #2c1319;
+  --color-cool: #56c7e0;
+
+  --radius-card: 22px;
+  --radius-control: 16px;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+
+  --shadow-lift: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.45);
+  --shadow-glow-gold: 0 0 0 1px rgb(231 182 92 / 0.25), 0 8px 28px rgb(231 182 92 / 0.16);
+  --shadow-glow-accent: 0 0 0 1px rgb(155 123 247 / 0.28), 0 8px 28px rgb(155 123 247 / 0.18);
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  /* Stops the double-tap-to-zoom delay, which otherwise makes every fast tap
+     game feel broken on iOS. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/*
+  Mobile browser chrome.
+
+  100vh is wrong on phones: it is the height with the address bar hidden, so a
+  full-height layout is cut off until the user scrolls. 100dvh follows the bar
+  as it moves, which is what "fills the screen" actually means here.
+*/
+.h-screen-safe {
+  min-height: 100dvh;
+}
+
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.75rem);
+}
+
+.pt-safe {
+  padding-top: max(env(safe-area-inset-top), 0.5rem);
+}
+
+/* Numbers that change constantly — scores, counters — should not make the
+   layout jitter as digits change width. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+}
+
+/* Visible focus, even in a dark room. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
