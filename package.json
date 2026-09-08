@@ -10,7 +10,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "db:test": "bash scripts/db-test.sh"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.6",

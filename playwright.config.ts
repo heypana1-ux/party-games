@@ -33,7 +33,8 @@ export default defineConfig({
   workers: 1,
   reporter: process.env.CI ? "github" : "list",
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000",
+    // `||`, not `??`: an empty E2E_BASE_URL must fall back, not become the base URL.
+    baseURL: process.env.E2E_BASE_URL || "http://127.0.0.1:3000",
     trace: "on-first-retry",
     launchOptions: { executablePath },
   },

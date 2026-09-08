@@ -152,21 +152,24 @@ begin
   -- Already a member? Then this is a reconnect, and it must return the person
   -- to their existing seat rather than create a second participant. This is the
   -- whole reconnect story: one unique key, one upsert, no heuristics.
-  select * into v_existing from room_members
-   where room_id = v_room.id and user_id = v_uid;
+  -- Tables are aliased throughout this file because `returns table (...)`
+  -- puts names like room_id and revision in scope as variables, and PL/pgSQL
+  -- then refuses an unqualified column of the same name as ambiguous.
+  select * into v_existing from room_members m
+   where m.room_id = v_room.id and m.user_id = v_uid;
 
   if found then
-    update room_members
+    update room_members m
        set left_at = null, last_seen_at = now()
-     where id = v_existing.id;
+     where m.id = v_existing.id;
     insert into join_attempts (user_id, ok) values (v_uid, true);
     return query select 'rejoined'::text, v_room.id, v_room.status, v_existing.is_spectator;
     return;
   end if;
 
   v_max := coalesce((v_room.settings ->> 'max_players')::int, 12);
-  select count(*) into v_count from room_members
-   where room_id = v_room.id and left_at is null;
+  select count(*) into v_count from room_members m
+   where m.room_id = v_room.id and m.left_at is null;
   if v_count >= v_max then
     insert into join_attempts (user_id, ok) values (v_uid, false);
     return query select 'invalid_code'::text, null::uuid, null::text, null::boolean;
@@ -214,7 +217,7 @@ begin
     raise exception 'not_authenticated' using errcode = '28000';
   end if;
 
-  select * into v_room from rooms where id = p_room for update;
+  select * into v_room from rooms r where r.id = p_room for update;
   if not found then
     return query select 'not_found'::text, null::uuid;
     return;
@@ -345,7 +348,7 @@ declare
   v_room    rooms%rowtype;
   v_session uuid;
 begin
-  select * into v_room from rooms where id = p_room_id for update;
+  select * into v_room from rooms r where r.id = p_room_id for update;
   if not found then
     return query select 'not_found'::text, null::uuid, null::bigint;
     return;
@@ -366,7 +369,7 @@ begin
     ) values (
       p_room_id, p_game_id, p_module_version, p_state_version, 'running',
       p_config, p_seed, p_initial_state, p_initial_state, now()
-    ) returning id into v_session;
+    ) returning game_sessions.id into v_session;
   exception when unique_violation then
     -- game_sessions_active_uidx: someone else started one microseconds ago.
     return query select 'already_running'::text, null::uuid, null::bigint;
@@ -380,7 +383,7 @@ begin
          p ->> 'display_name'
     from jsonb_array_elements(p_players) as p;
 
-  update rooms set status = 'in_game', last_activity_at = now() where id = p_room_id;
+  update rooms r set status = 'in_game', last_activity_at = now() where r.id = p_room_id;
 
   return query select 'started'::text, v_session, 0::bigint;
 end;
@@ -414,17 +417,17 @@ declare
 begin
   -- Replay of an action we already accepted (a retry after a dropped
   -- connection). Answer with the original outcome and change nothing.
-  select * into v_existing from game_actions
-   where session_id = p_session_id and client_action_id = p_client_action_id;
+  select * into v_existing from game_actions a
+   where a.session_id = p_session_id and a.client_action_id = p_client_action_id;
   if found then
     return query select 'duplicate'::text, v_existing.revision_after, v_existing.seq;
     return;
   end if;
 
   if p_actor is not null then
-    select count(*) into v_recent from game_actions
-     where session_id = p_session_id and actor_user_id = p_actor
-       and acted_at > now() - interval '10 seconds';
+    select count(*) into v_recent from game_actions a
+     where a.session_id = p_session_id and a.actor_user_id = p_actor
+       and a.acted_at > now() - interval '10 seconds';
     if v_recent >= 25 then
       return query select 'rate_limited'::text, null::bigint, null::int;
       return;
@@ -435,14 +438,14 @@ begin
   -- until the first commits, then re-checks this WHERE clause against the new
   -- row — so the loser matches nothing and is told to recompute rather than
   -- silently overwriting a state it never saw.
-  update game_sessions
+  update game_sessions s
      set state      = p_new_state,
-         revision   = revision + 1,
-         next_seq   = next_seq + 1,
-         status     = coalesce(p_new_status, status),
+         revision   = s.revision + 1,
+         next_seq   = s.next_seq + 1,
+         status     = coalesce(p_new_status, s.status),
          updated_at = now()
-   where id = p_session_id and revision = p_expected_revision
-   returning revision, next_seq - 1 into v_rev, v_seq;
+   where s.id = p_session_id and s.revision = p_expected_revision
+   returning s.revision, s.next_seq - 1 into v_rev, v_seq;
 
   if not found then
     return query select 'stale'::text, null::bigint, null::int;
@@ -462,8 +465,8 @@ begin
     raise exception 'concurrent_duplicate' using errcode = '40001';
   end if;
 
-  update rooms set last_activity_at = now()
-   where id = (select room_id from game_sessions where id = p_session_id);
+  update rooms r set last_activity_at = now()
+   where r.id = (select s.room_id from game_sessions s where s.id = p_session_id);
 
   return query select 'applied'::text, v_rev, v_seq;
 end;
@@ -487,8 +490,8 @@ declare
   v_max int;
   v_rev bigint;
 begin
-  select max(seq) into v_max from game_actions
-   where session_id = p_session_id and undone_at is null;
+  select max(a.seq) into v_max from game_actions a
+   where a.session_id = p_session_id and a.undone_at is null;
 
   if v_max is null then
     return query select 'nothing_to_undo'::text, null::bigint, null::int;
@@ -500,10 +503,10 @@ begin
     return;
   end if;
 
-  update game_sessions
-     set state = p_new_state, revision = revision + 1, updated_at = now()
-   where id = p_session_id and revision = p_expected_revision
-   returning revision into v_rev;
+  update game_sessions s
+     set state = p_new_state, revision = s.revision + 1, updated_at = now()
+   where s.id = p_session_id and s.revision = p_expected_revision
+   returning s.revision into v_rev;
 
   if not found then
     return query select 'stale'::text, null::bigint, null::int;
@@ -512,8 +515,8 @@ begin
 
   -- The row stays, marked. Its seq is never reissued, so every surviving
   -- action keeps the RNG draw it was decided with.
-  update game_actions set undone_at = now()
-   where session_id = p_session_id and seq = p_undo_seq;
+  update game_actions a set undone_at = now()
+   where a.session_id = p_session_id and a.seq = p_undo_seq;
 
   return query select 'undone'::text, v_rev, p_undo_seq;
 end;
@@ -537,7 +540,7 @@ declare
   v_result  uuid;
   v_rev     bigint;
 begin
-  select * into v_session from game_sessions where id = p_session_id;
+  select * into v_session from game_sessions s where s.id = p_session_id;
   if not found then
     return query select 'not_found'::text, null::uuid, null::bigint;
     return;
@@ -545,19 +548,19 @@ begin
 
   -- Finishing twice must not create two result rows; match_results.session_id
   -- is unique and this is the friendly path to that guarantee.
-  select id into v_result from match_results where session_id = p_session_id;
+  select r.id into v_result from match_results r where r.session_id = p_session_id;
   if found then
     return query select 'already_finished'::text, v_result, v_session.revision;
     return;
   end if;
 
-  select * into v_room from rooms where id = v_session.room_id for update;
+  select * into v_room from rooms r where r.id = v_session.room_id for update;
 
-  update game_sessions
-     set state = p_final_state, revision = revision + 1,
+  update game_sessions s
+     set state = p_final_state, revision = s.revision + 1,
          status = 'finished', finished_at = now(), updated_at = now()
-   where id = p_session_id and revision = p_expected_revision
-   returning revision into v_rev;
+   where s.id = p_session_id and s.revision = p_expected_revision
+   returning s.revision into v_rev;
 
   if not found then
     return query select 'stale'::text, null::uuid, null::bigint;
@@ -569,7 +572,7 @@ begin
   ) values (
     p_session_id, v_session.room_id, v_room.code,
     v_session.game_id, v_session.module_version, coalesce(p_summary, '{}'::jsonb)
-  ) returning id into v_result;
+  ) returning match_results.id into v_result;
 
   insert into match_result_players (
     result_id, user_id, display_name, placement, score, payload
@@ -582,7 +585,8 @@ begin
          coalesce(p -> 'payload', '{}'::jsonb)
     from jsonb_array_elements(p_players) as p;
 
-  update rooms set status = 'lobby', last_activity_at = now() where id = v_session.room_id;
+  update rooms r set status = 'lobby', last_activity_at = now()
+   where r.id = v_session.room_id;
 
   return query select 'finished'::text, v_result, v_rev;
 end;
@@ -597,7 +601,7 @@ as $$
 declare
   v_session game_sessions%rowtype;
 begin
-  select * into v_session from game_sessions where id = p_session_id;
+  select * into v_session from game_sessions s where s.id = p_session_id;
   if not found then return 'not_found'; end if;
 
   if not exists (
@@ -633,13 +637,13 @@ set search_path = public
 as $$
 declare v_rev bigint;
 begin
-  update game_sessions
+  update game_sessions s
      set state = p_new_state, initial_state = p_new_initial_state,
          state_version = p_state_version,
          module_version = p_module_version,
-         revision = revision + 1, updated_at = now()
-   where id = p_session_id and revision = p_expected_revision
-   returning revision into v_rev;
+         revision = s.revision + 1, updated_at = now()
+   where s.id = p_session_id and s.revision = p_expected_revision
+   returning s.revision into v_rev;
 
   if not found then
     return query select 'stale'::text, null::bigint;

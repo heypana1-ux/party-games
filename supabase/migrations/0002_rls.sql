@@ -146,13 +146,35 @@ drop policy if exists "result players readable to participants" on public.match_
 create policy "result players readable to participants" on public.match_result_players
   for select using (public.was_in_result(result_id));
 
--- ------------------------------------------------- default privileges ------
--- Belt and braces: even if a policy were added by mistake, the roles have no
--- table-level write grant on the state-bearing tables.
-revoke insert, update, delete on public.rooms            from anon, authenticated;
-revoke insert, update, delete on public.room_members     from anon, authenticated;
-revoke insert, update, delete on public.game_sessions    from anon, authenticated;
-revoke insert, update, delete on public.session_players  from anon, authenticated;
-revoke insert, update, delete on public.game_actions     from anon, authenticated;
-revoke insert, update, delete on public.match_results    from anon, authenticated;
-revoke insert, update, delete on public.match_result_players from anon, authenticated;
+-- ------------------------------------------------------- table privileges ---
+-- Stated explicitly rather than inherited.
+--
+-- Supabase grants the API roles broad privileges on `public` by default, which
+-- is fine right up until a migration quietly depends on it. Naming the grants
+-- here means the schema behaves identically on a bare PostgreSQL instance, it
+-- can be audited in one place, and a table added later gets nothing until
+-- somebody says so — the safe direction to fail in.
+--
+-- Two deliberate asymmetries:
+--   * `anon` gets nothing at all. Guests sign in anonymously, which makes them
+--     `authenticated`; a caller still holding `anon` has no business here.
+--   * `authenticated` gets SELECT and nothing else, except on its own profile.
+--     Even if a write policy were added by mistake, there is no grant to use.
+grant usage on schema public to anon, authenticated;
+
+revoke all on all tables in schema public from anon, authenticated;
+
+grant select on
+  public.profiles,
+  public.rooms,
+  public.room_members,
+  public.game_sessions,
+  public.session_players,
+  public.game_actions,
+  public.match_results,
+  public.match_result_players
+to authenticated;
+
+-- The one thing a client may write directly, and only its own row — the
+-- "profiles insert/update self" policies above decide which row that is.
+grant insert, update on public.profiles to authenticated;
