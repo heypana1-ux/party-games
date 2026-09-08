@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { createRoom } from "@/platform/rooms/client";
 import { useStoredName } from "@/platform/auth/useStoredName";
+import { CaptchaNotice } from "@/components/shell/CaptchaNotice";
 import { DisplayName } from "@/lib/validation/shared";
 
 export function CreateRoomForm() {
@@ -73,6 +74,8 @@ export function CreateRoomForm() {
           <Button type="submit" variant="host" size="lg" disabled={busy}>
             {busy ? <Spinner className="border-t-gold-ink" /> : "Create the room"}
           </Button>
+
+          <CaptchaNotice />
         </form>
       </SheetContent>
     </Sheet>

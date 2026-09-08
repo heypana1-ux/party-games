@@ -8,6 +8,7 @@ import { Input, Label } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { joinRoom } from "@/platform/rooms/client";
 import { useStoredName } from "@/platform/auth/useStoredName";
+import { CaptchaNotice } from "@/components/shell/CaptchaNotice";
 import { ROOM_CODE_ALPHABET } from "@/lib/validation/shared";
 
 const MESSAGES: Record<string, string> = {
@@ -113,6 +114,8 @@ export function JoinForm({ initialCode }: { initialCode: string }) {
           >
             {busy ? <Spinner className="border-t-accent-ink" /> : "Join"}
           </Button>
+
+          <CaptchaNotice />
         </form>
       </div>
 

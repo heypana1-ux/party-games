@@ -41,8 +41,13 @@ npm run dev
 ```
 
 Supabase setup — creating the project, applying the migrations, **enabling anonymous
-sign-in** — is in [`supabase/README.md`](supabase/README.md). The app needs its own Supabase
-project; do not point it at another app's.
+sign-in**, and wiring up hCaptcha — is in [`supabase/README.md`](supabase/README.md). The app
+needs its own Supabase project; do not point it at another app's.
+
+Without `NEXT_PUBLIC_HCAPTCHA_SITE_KEY` the captcha is skipped, so `npm run dev` works
+against a project that has Attack Protection turned off. Turn the two on together: Supabase
+refusing sign-ins that carry no captcha token looks exactly like anonymous sign-in being
+disabled.
 
 ```bash
 npm run typecheck   # next typegen + tsc

@@ -5,7 +5,9 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
   standing in for three phones in the same room.
 
   Needs a Supabase project with the migrations applied and anonymous sign-in
-  enabled, so it skips unless E2E_SUPABASE is set. It is the test that would
+  enabled, so it skips unless E2E_SUPABASE is set. If that project has Attack
+  Protection on, set NEXT_PUBLIC_HCAPTCHA_SITE_KEY to hCaptcha's always-passing
+  test key (10000000-ffff-ffff-ffff-000000000001) so no challenge is shown. It is the test that would
   have caught every realtime and reconnect bug this platform can have, so it
   should run in CI against a throwaway project.
 */

@@ -69,6 +69,33 @@ test.describe("shell", () => {
     await expect(page.getByRole("heading", { name: /offline/i })).toBeVisible();
   });
 
+  /*
+    With no site key configured the captcha must be entirely absent — not
+    merely hidden. This is the path local development and CI take, and a stray
+    third-party script request here would mean the skip logic had regressed.
+  */
+  test("no captcha is loaded when none is configured", async ({ page }) => {
+    test.skip(
+      Boolean(process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY),
+      "a site key is configured, so the captcha is expected",
+    );
+
+    const captchaRequests: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().includes("hcaptcha.com")) captchaRequests.push(request.url());
+    });
+
+    await page.goto("/join");
+    await expect(page.getByText(/protected by hcaptcha/i)).toHaveCount(0);
+
+    await page.getByLabel(/room code/i).fill("ABC234");
+    await page.getByLabel(/your name/i).fill("Alex");
+    await page.getByRole("button", { name: /^join$/i }).click();
+    await page.waitForTimeout(1500);
+
+    expect(captchaRequests).toEqual([]);
+  });
+
   test("manifest is installable", async ({ request }) => {
     const response = await request.get("/manifest.webmanifest");
     expect(response.ok()).toBe(true);

@@ -27,10 +27,32 @@ Guests are real `auth.users` rows. That is what makes `auth.uid()` the single id
 primitive everywhere — RLS, RPCs and Realtime all work the same for a guest and a
 registered user, and reconnecting is a lookup on a unique key rather than a guess.
 
-Turn on **Attack protection → Captcha** as well. Anonymous sign-in without a captcha is an
-open account factory.
+## 4. Turn on the captcha
 
-## 4. Optional: pg_cron for retention
+Anonymous sign-in without a captcha is an open account factory: one unauthenticated POST
+mints a permanent `auth.users` row, and nothing rate-limits a script doing that in a loop.
+
+**Do these two steps in this order, or every guest sign-in breaks in between.**
+
+1. Put the hCaptcha **site** key in the app's environment first and deploy it:
+
+   ```
+   NEXT_PUBLIC_HCAPTCHA_SITE_KEY=<site-key>
+   ```
+
+2. Then in Supabase: Authentication → **Attack Protection** → Captcha → provider
+   **hCaptcha**, and paste the hCaptcha **secret** key.
+
+The secret key lives only here. Supabase Auth is what calls hCaptcha's `siteverify`, so the
+app never needs it — there is no backend verification step to write, and the `curl` example
+in hCaptcha's own quickstart does not apply to this setup.
+
+With the site key unset the app skips the captcha entirely, which is what makes local
+development and CI work. hCaptcha's always-passing test key is
+`10000000-ffff-ffff-ffff-000000000001` if you want the code path exercised without a
+challenge.
+
+## 5. Optional: pg_cron for retention
 
 Dashboard → Database → Extensions → enable `pg_cron`, then re-run the `DO` block at the end
 of `0004_retention.sql`. Without it the reaper functions still exist and can be called
